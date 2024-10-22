@@ -88,6 +88,10 @@ def train():
 
     print(f"Starting training from epoch {start_epoch} for {args.epochs} epochs with {len(train_dataset)} training samples\n")
 
+    # Biến theo dõi loss tốt nhất
+    best_val_loss = float('inf')
+    best_model_wts = None
+
     # Gọi hàm huấn luyện tương ứng với mô hình
     model, log = train_fn(
         model,
@@ -100,6 +104,15 @@ def train():
         num_epochs=args.epochs,
         start_epoch=start_epoch
     )
+
+    # Kiểm tra và lưu mô hình tốt nhất
+    for epoch, val_loss in zip(log['epoch'], log['val_loss']):
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model_wts = model.state_dict()
+            best_model_save_filename = os.path.join(save_path, 'best_model.pth')
+            torch.save(best_model_wts, best_model_save_filename)
+            print(f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}")
 
     # Lưu training log
     df = pd.DataFrame({
