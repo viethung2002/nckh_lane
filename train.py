@@ -3,16 +3,18 @@ import os
 import sys
 
 import torch
-from model.lanenet.train_lanenet import train_model as train_lanenet_model  # Import hàm huấn luyện cho LaneNet
-from model.csnn.train_csnn import train_model as train_csnn_model  # Import hàm huấn luyện cho CSNN
 from dataloader.data_loaders import TusimpleSet
 from dataloader.transformers import Rescale
 from model.lanenet.LaneNet import LaneNet
-from model.csnn.LaneDetectionCSNN import LaneDetectionWithCSNN  # Import mô hình CSNN
+from model.csnn.LaneDetectionCSNN import LaneDetectionWithCSNN
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from model.utils.cli_helper import parse_args
+from model.utils.train_utils import train_lanenet_model, train_csnn_model  # Import các hàm huấn luyện từ train_utils.py
 import pandas as pd
+from tqdm import tqdm
+
+from model.lanenet.loss import compute_loss  # Import trực tiếp hàm compute_loss từ loss.py
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -59,11 +61,11 @@ def train():
 
     # Khởi tạo mô hình dựa trên `model_type`
     if args.model_type.lower() == 'lanenet':
-        model = LaneNet(arch=args.backbone)  # Khởi tạo LaneNet với backbone được chỉ định
-        train_fn = train_lanenet_model  # Sử dụng hàm huấn luyện của LaneNet
+        model = LaneNet(arch=args.backbone)
+        train_fn = train_lanenet_model
     elif args.model_type.lower() == 'csnn':
-        model = LaneDetectionWithCSNN()  # Khởi tạo CSNN
-        train_fn = train_csnn_model  # Sử dụng hàm huấn luyện của CSNN
+        model = LaneDetectionWithCSNN()
+        train_fn = train_csnn_model
     else:
         raise ValueError(f"Unsupported model type: {args.model_type}")
 
@@ -93,38 +95,79 @@ def train():
     best_model_wts = None
 
     # Gọi hàm huấn luyện tương ứng với mô hình
-    model, log = train_fn(
-        model,
-        optimizer,
-        scheduler=None,
-        dataloaders=dataloaders,
-        dataset_sizes=dataset_sizes,
-        device=DEVICE,
-        loss_type=args.loss_type,
-        num_epochs=args.epochs,
-        start_epoch=start_epoch
-    )
+    for epoch in range(start_epoch, args.epochs):
+        print(f'Epoch {epoch}/{args.epochs - 1}')
+        print('-' * 10)
 
-    # Kiểm tra và lưu mô hình tốt nhất
-    for epoch, val_loss in zip(log['epoch'], log['val_loss']):
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_model_wts = model.state_dict()
-            best_model_save_filename = os.path.join(save_path, 'best_model.pth')
-            torch.save(best_model_wts, best_model_save_filename)
-            print(f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}")
+        # Mỗi epoch sẽ có hai phase: train và val
+        for phase in ['train', 'val']:
+            if phase == 'train':
+                model.train()  # Đặt mô hình vào chế độ huấn luyện
+            else:
+                model.eval()  # Đặt mô hình vào chế độ đánh giá
 
-    # Lưu training log
-    df = pd.DataFrame({
-        'epoch': log['epoch'],
-        'training_loss': log['training_loss'],
-        'val_loss': log['val_loss']
-    })
+            running_loss = 0.0
+            running_loss_b = 0.0
+            running_loss_i = 0.0
+            correct_binary = 0
+            total_pixels = 0
+            false_positive_result = 0
+            true_positive_result = 0
 
-    train_log_save_filename = os.path.join(save_path, 'training_log.csv')
-    df.to_csv(train_log_save_filename, columns=['epoch', 'training_loss', 'val_loss'],
-              header=True, index=False, encoding='utf-8')
-    print("Training log is saved: {}".format(train_log_save_filename))
+            # Thêm thanh tiến trình cho mỗi epoch
+            with tqdm(total=len(dataloaders[phase]), desc=f'{phase.capitalize()} Epoch {epoch}') as pbar:
+                for inputs, binarys, instances in dataloaders[phase]:
+                    inputs = inputs.type(torch.FloatTensor).to(DEVICE)
+                    binarys = binarys.type(torch.LongTensor).to(DEVICE)
+                    instances = instances.type(torch.FloatTensor).to(DEVICE)
+
+                    # Zero gradients
+                    optimizer.zero_grad()
+
+                    # Forward pass
+                    with torch.set_grad_enabled(phase == 'train'):
+                        outputs = model(inputs)
+                        total_loss, binary_loss, instance_loss, _ = compute_loss(outputs, binarys, instances, args.loss_type)
+
+                        # Backward pass + Optimize nếu trong phase train
+                        if phase == 'train':
+                            total_loss.backward()
+                            optimizer.step()
+
+                    # Cập nhật các thông số thống kê
+                    running_loss += total_loss.item() * inputs.size(0)
+                    running_loss_b += binary_loss.item() * inputs.size(0)
+                    running_loss_i += instance_loss.item() * inputs.size(0)
+                    binary_preds = torch.argmax(outputs['binary_seg_logits'], dim=1)
+                    correct_binary += torch.sum(binary_preds == binarys).item()
+                    false_positive_result += torch.sum((binary_preds == 1) & (binarys == 0)).item()
+                    true_positive_result += torch.sum((binary_preds == 1) & (binarys == 1)).item()
+                    total_pixels += binarys.numel()
+
+                    # Cập nhật thanh tiến trình
+                    pbar.update(1)
+
+            # Tính toán thống kê cho mỗi epoch
+            epoch_loss = running_loss / dataset_sizes[phase]
+            binary_loss = running_loss_b / dataset_sizes[phase]
+            instance_loss = running_loss_i / dataset_sizes[phase]
+            binary_accuracy = correct_binary / total_pixels
+
+            # Precision, Recall, F1 calculations
+            binary_total_false = total_pixels - correct_binary
+            binary_precision = true_positive_result / (true_positive_result + false_positive_result) if (true_positive_result + false_positive_result) != 0 else 0
+            binary_recall = true_positive_result / (true_positive_result + binary_total_false - false_positive_result) if (true_positive_result + binary_total_false - false_positive_result) != 0 else 0
+            binary_f1_score = (2 * binary_precision * binary_recall) / (binary_precision + binary_recall) if (binary_precision + binary_recall) != 0 else 0
+
+            print(f'{phase.capitalize()} Total Loss: {epoch_loss:.4f} Binary Loss: {binary_loss:.4f} Instance Loss: {instance_loss:.4f} Accuracy: {binary_accuracy:.4f} F1-Score: {binary_f1_score:.4f}')
+
+            # Lưu mô hình tốt nhất dựa trên validation loss
+            if phase == 'val' and epoch_loss < best_val_loss:
+                best_val_loss = epoch_loss
+                best_model_wts = model.state_dict()
+                best_model_save_filename = os.path.join(save_path, 'best_model.pth')
+                torch.save(best_model_wts, best_model_save_filename)
+                print(f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}")
 
     # Lưu checkpoint sau khi huấn luyện
     model_save_filename = os.path.join(save_path, 'checkpoint.pth')

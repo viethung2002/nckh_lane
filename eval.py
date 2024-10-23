@@ -6,13 +6,11 @@ import torch
 from dataloader.data_loaders import TusimpleSet
 from dataloader.transformers import Rescale
 from model.lanenet.LaneNet import LaneNet
-from torch.utils.data import DataLoader, dataloader
-from torch.autograd import Variable
-
+from torch.utils.data import DataLoader
 from torchvision import transforms
-
 from model.utils.cli_helper_eval import parse_args
 from model.eval_function import Eval_Score
+from model.utils.train_utils import calculate_map  # Import the calculate_map function
 
 import numpy as np
 from PIL import Image
@@ -47,19 +45,30 @@ def evaluation():
     model.eval()
     model.to(DEVICE)
 
-    iou, dice = 0, 0
+    iou, dice, map_score = 0, 0, 0  # Initialize mAP
+
     with torch.no_grad():
         for x, target, _ in eval_dataloader:
-            y = model(x.to(DEVICE))
+            x = x.to(DEVICE)
+            y = model(x)
+
             y_pred = torch.squeeze(y['binary_seg_pred'].to('cpu')).numpy()
             y_true = torch.squeeze(target).numpy()
+
+            # Calculate Dice and IoU using existing Eval_Score class
             Score = Eval_Score(y_pred, y_true)
             dice += Score.Dice()
             iou += Score.IoU()
-    
-    print('Final_IoU: %s'% str(iou/len(eval_dataloader.dataset)))
-    print('Final_F1: %s'% str(dice/len(eval_dataloader.dataset)))
 
+            # Calculate mAP using calculate_map function
+            y_prob = torch.sigmoid(y['binary_seg_pred'])  # Apply sigmoid to get probability
+            mean_ap = calculate_map(y_prob.cpu(), target)
+            map_score += mean_ap
+
+    num_samples = len(eval_dataloader.dataset)
+    print('Final_IoU: {:.4f}'.format(iou / num_samples))
+    print('Final_F1: {:.4f}'.format(dice / num_samples))
+    print('Final_mAP: {:.4f}'.format(map_score / num_samples))  # Print the final mAP
 
 if __name__ == "__main__":
     evaluation()
