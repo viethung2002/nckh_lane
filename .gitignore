@@ -127,6 +127,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
+log/*.pth
 checkpoints/*.pth
 training_data_subset2
+log
+logs
