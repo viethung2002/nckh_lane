@@ -1,0 +1,8 @@
+
+torch>=1.2
+numpy>=1.7
+torchvision>=0.4.0
+matplotlib
+opencv-python
+pandas
+    

@@ -43,7 +43,7 @@ class LaneATT(nn.Module):
         features = self._encoder(input_tensor)
 
         # Check the output shape of the encoder
-        print(f"Encoder output shape: {features.shape}")
+        # print(f"Encoder output shape: {features.shape}")
 
         # Additional convolution layers for lane feature extraction
         features = self.conv1x1(features)
@@ -62,9 +62,9 @@ class LaneATT(nn.Module):
         binary = self.upsample(binary)
         instance = self.upsample(instance)
 
-        # Check the upsampled output shapes
-        print(f"Upsampled binary output shape: {binary.shape}")
-        print(f"Upsampled instance output shape: {instance.shape}")
+        # # Check the upsampled output shapes
+        # print(f"Upsampled binary output shape: {binary.shape}")
+        # print(f"Upsampled instance output shape: {instance.shape}")
 
         # Generate binary segmentation prediction
         binary_seg_ret = torch.argmax(F.softmax(binary, dim=1), dim=1, keepdim=True)

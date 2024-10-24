@@ -11,7 +11,7 @@ def parse_args():
     parser.add_argument("--epochs", required=False, type=int, help="Number of training epochs", default=25)
     parser.add_argument("--width", required=False, type=int, help="Resize width for input images", default=512)
     parser.add_argument("--height", required=False, type=int, help="Resize height for input images", default=256)
-    parser.add_argument("--bs", required=False, type=int, help="Batch size for training", default=4)
+    parser.add_argument("--bs", required=False, type=int, help="Batch size for training", default=8)
     parser.add_argument("--val", required=False, type=bool, help="Use validation during training", default=False)
     parser.add_argument("--lr", required=False, type=float, help="Learning rate", default=0.0001)
     parser.add_argument("--pretrained_model", type=str, default=None, help="Path to the pretrained model file")

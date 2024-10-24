@@ -11,14 +11,34 @@ from model.laneatt.LaneATT import LaneATT
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from model.utils.cli_helper import parse_args
-from model.utils.train_utils import train_laneatt_model, train_lanenet_model, train_scnn_model  # Import các hàm huấn luyện từ train_utils.py
+from model.utils.train_utils import train_laneatt_model, train_lanenet_model, train_scnn_model
 import pandas as pd
 from tqdm import tqdm
 
 from model.lanenet.loss import compute_loss
 
-
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+
+# Hàm lưu checkpoint
+def save_checkpoint(epoch, model, optimizer, best_val_loss, save_path='checkpoint.pth'):
+    checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'best_val_loss': best_val_loss
+    }
+    torch.save(checkpoint, save_path)
+    print(f"Checkpoint saved at {save_path}")
+
+# Hàm tải checkpoint
+def load_checkpoint(save_path, model, optimizer):
+    checkpoint = torch.load(save_path, map_location=DEVICE)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    start_epoch = checkpoint['epoch'] + 1
+    best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+    print(f"Checkpoint loaded from {save_path}, starting from epoch {start_epoch}")
+    return start_epoch, best_val_loss
 
 def train():
     args = parse_args()
@@ -79,25 +99,39 @@ def train():
     # Khởi tạo optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
 
-    # Initialize start_epoch
+    # Biến khởi tạo
     start_epoch = 0
+    best_val_loss = float('inf')
 
-    # Load model_state_dict nếu có
-    if args.pretrained_model is not None:
+    # Load checkpoint nếu có
+    checkpoint_path = os.path.join(save_path, 'checkpoint.pth')
+    if os.path.isfile(checkpoint_path):
+        start_epoch, best_val_loss = load_checkpoint(checkpoint_path, model, optimizer)
+
+    # Load model_state_dict nếu có pretrained model
+    if args.pretrained_model is not None and not os.path.isfile(checkpoint_path):
         if os.path.isfile(args.pretrained_model):
             print('Loading model state_dict from {}'.format(args.pretrained_model))
-            model_state = torch.load(args.pretrained_model, map_location=DEVICE)             
-            model.load_state_dict(model_state)
-            print('Model state_dict loaded successfully.')
+            checkpoint = torch.load(args.pretrained_model, map_location=DEVICE)
+
+            # Kiểm tra nếu checkpoint chứa 'model_state_dict'
+            if 'model_state_dict' in checkpoint:
+                model_state = checkpoint['model_state_dict']
+            else:
+                model_state = checkpoint
+
+            # Nạp các trọng số với `strict=False` để bỏ qua các khóa không cần thiết
+            try:
+                model.load_state_dict(model_state, strict=False)
+                print('Model state_dict loaded successfully.')
+            except Exception as e:
+                print(f"Error loading state_dict: {e}")
+                sys.exit(1)
         else:
             print('Model state_dict not found at {}'.format(args.pretrained_model))
             sys.exit(1)
 
     print(f"Starting training from epoch {start_epoch} for {args.epochs} epochs with {len(train_dataset)} training samples\n")
-
-    # Biến theo dõi loss tốt nhất
-    best_val_loss = float('inf')
-    best_model_wts = None
 
     # Gọi hàm huấn luyện tương ứng với mô hình
     for epoch in range(start_epoch, args.epochs):
@@ -119,8 +153,8 @@ def train():
             false_positive_result = 0
             true_positive_result = 0
 
-            # Thêm thanh tiến trình cho mỗi epoch
-            with tqdm(total=len(dataloaders[phase]), desc=f'{phase.capitalize()} Epoch {epoch}') as pbar:
+            # Thêm thanh tiến trình cho mỗi epoch, chỉ để hiển thị tiến trình mà không có log chi tiết của batch
+            with tqdm(total=len(dataloaders[phase]), desc=f'{phase.capitalize()} Epoch {epoch}', leave=False) as pbar:
                 for inputs, binarys, instances in dataloaders[phase]:
                     inputs = inputs.type(torch.FloatTensor).to(DEVICE)
                     binarys = binarys.type(torch.LongTensor).to(DEVICE)
@@ -149,10 +183,10 @@ def train():
                     true_positive_result += torch.sum((binary_preds == 1) & (binarys == 1)).item()
                     total_pixels += binarys.numel()
 
-                    # Cập nhật thanh tiến trình
+                    # Cập nhật thanh tiến trình sau mỗi batch
                     pbar.update(1)
 
-            # Tính toán thống kê cho mỗi epoch
+            # Tính toán thống kê cho mỗi epoch sau khi kết thúc vòng lặp batch
             epoch_loss = running_loss / dataset_sizes[phase]
             binary_loss = running_loss_b / dataset_sizes[phase]
             instance_loss = running_loss_i / dataset_sizes[phase]
@@ -164,6 +198,7 @@ def train():
             binary_recall = true_positive_result / (true_positive_result + binary_total_false - false_positive_result) if (true_positive_result + binary_total_false - false_positive_result) != 0 else 0
             binary_f1_score = (2 * binary_precision * binary_recall) / (binary_precision + binary_recall) if (binary_precision + binary_recall) != 0 else 0
 
+            # In kết quả sau mỗi epoch khi thanh tiến trình hoàn thành
             print(f'{phase.capitalize()} Total Loss: {epoch_loss:.4f} Binary Loss: {binary_loss:.4f} Instance Loss: {instance_loss:.4f} Accuracy: {binary_accuracy:.4f} F1-Score: {binary_f1_score:.4f}')
 
             # Lưu mô hình tốt nhất dựa trên validation loss
@@ -174,15 +209,10 @@ def train():
                 torch.save(best_model_wts, best_model_save_filename)
                 print(f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}")
 
-    # Lưu checkpoint sau khi huấn luyện
-    model_save_filename = os.path.join(save_path, 'checkpoint.pth')
-    checkpoint = {
-        'epoch': args.epochs - 1,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-    }
-    torch.save(checkpoint, model_save_filename)
-    print("Checkpoint is saved: {}".format(model_save_filename))
+        # Lưu checkpoint sau mỗi epoch
+        save_checkpoint(epoch, model, optimizer, best_val_loss, save_path=checkpoint_path)
+
+    print("Training complete.")
 
 if __name__ == '__main__':
     train()
