@@ -6,15 +6,17 @@ import torch
 from dataloader.data_loaders import TusimpleSet
 from dataloader.transformers import Rescale
 from model.lanenet.LaneNet import LaneNet
-from model.csnn.LaneDetectionCSNN import LaneDetectionWithCSNN
+from model.scnn.LaneDetectionSCNN import LaneDetectionWithSCNN
+from model.laneatt.LaneATT import LaneATT
 from torch.utils.data import DataLoader
 from torchvision import transforms
 from model.utils.cli_helper import parse_args
-from model.utils.train_utils import train_lanenet_model, train_csnn_model  # Import các hàm huấn luyện từ train_utils.py
+from model.utils.train_utils import train_laneatt_model, train_lanenet_model, train_scnn_model  # Import các hàm huấn luyện từ train_utils.py
 import pandas as pd
 from tqdm import tqdm
 
-from model.lanenet.loss import compute_loss  # Import trực tiếp hàm compute_loss từ loss.py
+from model.lanenet.loss import compute_loss
+
 
 DEVICE = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
@@ -63,9 +65,12 @@ def train():
     if args.model_type.lower() == 'lanenet':
         model = LaneNet(arch=args.backbone)
         train_fn = train_lanenet_model
-    elif args.model_type.lower() == 'csnn':
-        model = LaneDetectionWithCSNN()
-        train_fn = train_csnn_model
+    elif args.model_type.lower() == 'scnn':
+        model = LaneDetectionWithSCNN()
+        train_fn = train_scnn_model
+    elif args.model_type.lower() == 'laneatt':
+        model = LaneATT()
+        train_fn = train_laneatt_model
     else:
         raise ValueError(f"Unsupported model type: {args.model_type}")
 
@@ -81,7 +86,7 @@ def train():
     if args.pretrained_model is not None:
         if os.path.isfile(args.pretrained_model):
             print('Loading model state_dict from {}'.format(args.pretrained_model))
-            model_state = torch.load(args.pretrained_model, map_location=DEVICE)
+            model_state = torch.load(args.pretrained_model, map_location=DEVICE)             
             model.load_state_dict(model_state)
             print('Model state_dict loaded successfully.')
         else:

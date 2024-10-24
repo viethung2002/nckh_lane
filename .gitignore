@@ -129,3 +129,4 @@ dmypy.json
 .pyre/
 
 checkpoints/*.pth
+training_data_subset2
