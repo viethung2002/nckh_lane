@@ -196,9 +196,78 @@ The following output files will be saved to the specified directory (`--save`):
 
 The `test_pipeline.py` script is designed to demonstrate the capability of the model by showing both the detected lane mask and the overlay results for better visualization of lane detection.
 
---- 
+Certainly! I'll add a section to your README for training the HNet model, following the format used in the rest of the document.
 
-This section provides users with clear guidance on how to test their lane detection model after training, using the provided test script. Let me know if this addition is what you were looking for or if you need any more modifications.
+---
+
+## Training the Homography Network (HNet)
+The `HNet` (Homography Net) is an auxiliary network used for estimating homography transformations. Below is a detailed guide on how to train HNet using the provided script.
+
+### Environment Setup
+To train `HNet`, make sure that you have the following packages installed:
+```
+python=3.6
+torch>=1.2
+numpy=1.7
+torchvision>=0.4.0
+opencv-python
+```
+
+### Training the Model
+You can train the HNet model using the following script:
+
+```sh
+python train_hnet.py --phase <pretrain|train> --data_path <path/to/gt_label_pts.txt> --image_dir <path/to/image_directory> [OPTIONS]
+```
+
+#### Required Arguments
+- `--phase`: Specify whether to pretrain or train the HNet model. Options:
+  - `pretrain`: Use this to pretrain the model.
+  - `train`: Use this to train the model.
+- `--data_path`: Path to the `gt_label_pts.txt` file that contains the ground truth label points.
+- `--image_dir`: Path to the directory containing the training images.
+
+#### Optional Arguments
+- `--pre_hnet_weights`: Path to the pretrained HNet weights (used in pretrain or train phases to continue from a checkpoint).
+- `--hnet_weights`: Path to the HNet model weights to be loaded (useful if training is continuing from a trained state).
+- `--batch_size`: The batch size to be used during training. Default is `1` to reduce GPU memory usage.
+- `--learning_rate_pretrain`: Learning rate used for the pretraining phase. Default is `0.0001`.
+- `--learning_rate_train`: Learning rate used for the main training phase. Default is `0.00005`.
+- `--num_epochs`: The number of epochs for which the model should be trained. Default is `20005`.
+
+#### Example Commands
+1. **Pretraining the Model**:
+   ```sh
+   python train_hnet.py --phase pretrain --data_path ./data/gt_label_pts.txt --image_dir ./data/images --pre_hnet_weights ./model/hnet_epoch_0.pth
+   ```
+   In this example, the HNet model is pretrained using the data from `gt_label_pts.txt` and corresponding images from `data/images` directory. If a pretrained model is available, it can be loaded via the `--pre_hnet_weights` option.
+
+2. **Training the Model**:
+   ```sh
+   python train_hnet.py --phase train --data_path ./data/gt_label_pts.txt --image_dir ./data/images --hnet_weights ./model/hnet_pretrained.pth
+   ```
+   This example will train the HNet model using weights from `hnet_pretrained.pth` to start. You can also train from scratch if no pretrained weights are available.
+
+#### Training Details
+- **Pretraining Phase**: This phase involves initializing the network and training it in a simplified form for homography estimation. It is recommended to use a lower learning rate during pretraining to ensure better generalization.
+- **Training Phase**: This phase is used to further fine-tune the model after pretraining. If pre-trained weights are available, they can be used to initialize the training process.
+
+The loss function used in both phases is **Mean Squared Error (MSE)**, and it calculates the difference between the transformed points predicted by HNet and the ground truth points. The training process makes use of the **Adam optimizer** with different learning rates for pretraining and training.
+
+### Checkpoints and Saving the Model
+The model checkpoints are saved at different intervals. During training:
+- The model will save a checkpoint every `1000` epochs with the naming convention `./model/hnet_epoch_<epoch>.pth`.
+
+### Important Notes
+- The batch size is set to `1` to minimize GPU memory usage.
+- The **homography matrix** is computed based on 8 coefficients predicted by the network. The transformation is applied on points in the image to match them to a ground truth reference.
+- The training script supports both pretraining (`pretrain`) and full training (`train`) modes to ensure the best initialization and learning process.
+
+By using the provided training scripts for `HNet`, you can train a homography network for lane detection which helps in transforming and aligning lane predictions during post-processing.
+
+---
+
+This added section should make it easier for users to understand how to use the HNet training script effectively. Let me know if you need further modifications or if there's anything else you'd like to add!
 
 
 
