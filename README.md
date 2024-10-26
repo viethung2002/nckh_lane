@@ -147,13 +147,13 @@ Alright, I'll add a section titled "Testing the Model" with instructions on how 
 ---
 
 ## Testing the Model
-After training, you can test the trained model on individual images using the provided `test_point.py` script. This allows you to evaluate the performance of the lane detection model and visualize the output lane masks and overlay results.
+After training, you can test the trained model on individual images using the provided `test_pipeline.py` script. This allows you to evaluate the performance of the lane detection model and visualize the output lane masks and overlay results.
 
 ### Test Command
 To test the trained model using a specific input image, run the following command:
 
 ```sh
-python test_point.py --img <path_to_test_image> --model <path_to_trained_model> --hnet_model <path_to_hnet_model> [OPTIONS]
+python test_pipeline.py --img <path_to_test_image> --model <path_to_trained_model> --hnet_model <path_to_hnet_model> [OPTIONS]
 ```
 
 ### Required Arguments
@@ -174,7 +174,7 @@ python test_point.py --img <path_to_test_image> --model <path_to_trained_model> 
 ### Example Command
 To test a `LaneNet` model with `BiSeNet` backbone, using an example image, run:
 ```sh
-python test_point.py --img ./data/tusimple_test_image/0.jpg --model ./log/best_model.pth --hnet_model ./model/hnet_epoch_0.pth --model_type lanenet --backbone BiSeNet --save ./test_output
+python test_pipeline.py --img ./data/tusimple_test_image/0.jpg --model ./log/best_model.pth --hnet_model ./model/hnet_epoch_0.pth --model_type lanenet --backbone BiSeNet --save ./test_output
 ```
 
 This will:
@@ -194,7 +194,7 @@ The following output files will be saved to the specified directory (`--save`):
 - The output directory (`--save`) will be created if it does not exist.
 - The models and weights provided to `--model` and `--hnet_model` must match the expected formats trained by this framework.
 
-The `test_point.py` script is designed to demonstrate the capability of the model by showing both the detected lane mask and the overlay results for better visualization of lane detection.
+The `test_pipeline.py` script is designed to demonstrate the capability of the model by showing both the detected lane mask and the overlay results for better visualization of lane detection.
 
 --- 
 
