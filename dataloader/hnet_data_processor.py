@@ -28,7 +28,7 @@ class HNetDataset(Dataset):
         image = np.array(image).astype(np.float32) / 255.0  # Chuẩn hóa ảnh
         image = torch.from_numpy(image).permute(2, 0, 1)  # Chuyển đổi sang tensor với thứ tự (C, H, W)
 
-        # Trả về điểm gt (x, y) dưới dạng tensor
-        gt_points = torch.tensor([x, y, 1.0], dtype=torch.float32)  # Include homogeneous coordinate
+        # Trả về điểm gt (x, y) dưới dạng tensor với shape [num_points, 2]
+        gt_points = torch.tensor([[x, y]], dtype=torch.float32)  # Shape: [1, 2]
 
         return image, gt_points

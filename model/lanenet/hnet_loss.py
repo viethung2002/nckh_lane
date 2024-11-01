@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 class HNetLoss(nn.Module):
     def __init__(self):
         """
@@ -13,7 +12,7 @@ class HNetLoss(nn.Module):
     def forward(self, gt_pts, transformation_coefficients):
         """
         Compute H-Net Loss
-        :param gt_pts: Ground truth points in the form of tensor [batch_size, num_points, 3]
+        :param gt_pts: Ground truth points in the form of tensor [batch_size, num_points, 2]
         :param transformation_coefficients: Predicted transformation coefficients, shape [batch_size, 8]
         :return: Computed loss
         """
@@ -23,14 +22,6 @@ class HNetLoss(nn.Module):
              -2.94687413, 70.6836681, -0.0467392998, 
              0.0, 0.0]
         ], dtype=torch.float32).to(gt_pts.device).repeat(gt_pts.size(0), 1)
-
-        # Add a 1.0 to the transformation coefficients to make it a 3x3 matrix
-        # Assuming output has 8 coefficients
-        # If only 6 are used, adjust accordingly
-        transformation_coefficients = torch.cat([
-            transformation_coefficients, 
-            torch.ones(transformation_coefficients.size(0), 0).to(gt_pts.device)  # No additional coefficients
-        ], dim=-1)
 
         # Construct the 3x3 homography matrix
         H = self._construct_homography_matrix(transformation_coefficients)

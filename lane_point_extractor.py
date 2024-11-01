@@ -78,7 +78,7 @@ if __name__ == '__main__':
     output_file = "gt_label_pts.txt"
 
     # Số điểm cần lấy trên mỗi làn đường
-    num_points = 100
+    num_points = 50
 
     # Tạo file chứa gt_label_pts với số điểm cố định
     generate_gt_label_pts(data_dir, output_file, num_points)
