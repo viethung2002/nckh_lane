@@ -20,7 +20,7 @@ parser.add_argument('--image_dir', type=str, help='Path to the image directory')
 args = parser.parse_args()
 
 # Định nghĩa các tham số huấn luyện
-batch_size = 1  # Giảm batch size để giảm bộ nhớ GPU
+batch_size = 16  # Giảm batch size để giảm bộ nhớ GPU
 learning_rate_pretrain = 0.0001
 learning_rate_train = 0.00005
 num_epochs = 20005
@@ -44,17 +44,23 @@ def save_model(model, path, epoch):
 
 # Hàm áp dụng homography lên các điểm
 def apply_homography(points, coefficients):
-    H = torch.zeros((3, 3), device=coefficients.device)
-    H[0, 0], H[0, 1], H[0, 2] = coefficients[0], coefficients[1], coefficients[2]
-    H[1, 0], H[1, 1], H[1, 2] = coefficients[3], coefficients[4], coefficients[5]
-    H[2, 0], H[2, 1] = coefficients[6], coefficients[7]
-    H[2, 2] = 1.0
+    batch_size = coefficients.size(0)
+    H = torch.zeros((batch_size, 3, 3), device=coefficients.device)
+    H[:, 0, 0] = coefficients[:, 0]
+    H[:, 0, 1] = coefficients[:, 1]
+    H[:, 0, 2] = coefficients[:, 2]
+    H[:, 1, 0] = coefficients[:, 3]
+    H[:, 1, 1] = coefficients[:, 4]
+    H[:, 1, 2] = coefficients[:, 5]
+    H[:, 2, 0] = coefficients[:, 6]
+    H[:, 2, 1] = coefficients[:, 7]
+    H[:, 2, 2] = 1.0
 
-    num_points = points.shape[0]
-    homogeneous_points = torch.cat([points, torch.ones((num_points, 1), device=points.device)], dim=1)
+    num_points = points.size(1)
+    homogeneous_points = torch.cat([points, torch.ones((batch_size, num_points, 1), device=points.device)], dim=-1)
     
-    transformed_points = torch.matmul(homogeneous_points, H.t())
-    transformed_points = transformed_points[:, :2] / transformed_points[:, 2].unsqueeze(1)
+    transformed_points = torch.bmm(homogeneous_points, H.transpose(1, 2))
+    transformed_points = transformed_points[:, :, :2] / transformed_points[:, :, 2].unsqueeze(-1)
     return transformed_points
 
 # Chức năng chính để huấn luyện mô hình
@@ -76,9 +82,9 @@ def train_hnet(phase, pre_hnet_weights=None, hnet_weights=None):
                 # Forward pass
                 output = net(images)
                 
-                # Compute loss
-                transformed_points = apply_homography(gt_points.squeeze(0), output.squeeze(0))
-                pre_loss = criterion(transformed_points, gt_points.squeeze(0))
+                # Compute loss for the entire batch
+                transformed_points = apply_homography(gt_points, output)
+                pre_loss = criterion(transformed_points, gt_points)
 
                 # Backward pass and optimize
                 pre_loss.backward()
@@ -109,8 +115,8 @@ def train_hnet(phase, pre_hnet_weights=None, hnet_weights=None):
                 optimizer.zero_grad()
 
                 output = net(images)
-                transformed_points = apply_homography(gt_points.squeeze(0), output.squeeze(0))
-                loss = criterion(transformed_points, gt_points.squeeze(0))
+                transformed_points = apply_homography(gt_points, output)
+                loss = criterion(transformed_points, gt_points)
 
                 loss.backward()
                 optimizer.step()
