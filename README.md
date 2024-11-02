@@ -31,8 +31,49 @@ path/to/your/unzipped/file should like this:
 |----label_data_0531.json
 |----label_data_0601.json
 |----test_label.json
-```  
+```
 
+## Convert dataset from CULane to TuSimple
+CULane like this:
+```
+|--dataset
+|----folder_image_1
+|------img_1.jpg
+|------img_1.lines.jpg
+|------img_2.jpg
+|------img_2.lines.jpg
+|------img_3.jpg
+|------ ...
+|----folder_image_2
+|------img_1.jpg
+|------img_1.lines.jpg
+|------img_2.jpg
+|------...
+```
+You can see the sample at ```dataset/dataset```.
+Run this cell to get the data images (change the path accordingly):
+```
+python split_image.py
+```
+Run the cells below to convert from CULane to TuSimple:
+```
+python convert_to_tusimple.py
+```
+Adjust the following path according to your data:
+```
+img_path = 'clips/data'
+culane_labels_dir = 'dataset/MOVI1818_image'
+output_json_path = 'dataset_test/label_data_data.json'
+```
+Beside, ```create_test_label.py``` is used to create a test set with the first 20 images of the dataset.
+Finally, run the following command to create a suitable dataset for training and validation:
+```
+python tusimple_transform.py --src_dir path/to/dataset_tusimple --val True
+```
+Example:
+```
+python tusimple_transform.py --src_dir dataset/dataset_tusimple --val True
+```
 ## Training the model    
 The environment for training and evaluation:  
 ```
