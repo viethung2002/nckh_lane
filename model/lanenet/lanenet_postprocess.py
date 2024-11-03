@@ -48,18 +48,25 @@ class LaneNetPostProcessor:
         return num_labels, labels, stats, centroids
 
     def _dbscan_cluster(self, embedding_feats):
-        db = DBSCAN(eps=self.eps, min_samples=self.min_samples)
+        if embedding_feats.size == 0:
+            return np.array([]), np.array([])
+
         features = StandardScaler().fit_transform(embedding_feats)
-        db.fit(features)
-        db_labels = db.labels_
-        unique_labels = np.unique(db_labels)
-        return db_labels, unique_labels
+        db = DBSCAN(eps=self.eps, min_samples=self.min_samples).fit(features)
+        labels = db.labels_
+        unique_labels = np.unique(labels)
+        return labels, unique_labels
 
     def _apply_hnet(self, image):
         image_tensor = torch.tensor(image, dtype=torch.float32).unsqueeze(0).to(self.device)
         with torch.no_grad():
             hnet_output = self.hnet(image_tensor)
         return hnet_output.squeeze().cpu().numpy()
+
+    def _get_embedding_feats(self, instance_seg_logits):
+        # Extract embedding features from instance segmentation logits
+        embedding_feats = instance_seg_logits.reshape(-1, instance_seg_logits.shape[-1])
+        return embedding_feats
 
     def postprocess(self, binary_seg_pred, instance_seg_logits, source_image=None):
         """
@@ -88,6 +95,12 @@ class LaneNetPostProcessor:
         instance_seg_logits = instance_seg_logits.squeeze().cpu().numpy()
         idx = np.where(binary_seg_pred == 255)
         embedding_feats = instance_seg_logits[:, idx[0], idx[1]].T
+
+        # Add logging to check the shape and content of embedding_feats
+        print(f"Shape of embedding_feats: {embedding_feats.shape}")
+        if embedding_feats.size == 0:
+            print("No embedding features found.")
+            return None, None
 
         # Phân cụm các đặc trưng nhúng để phân biệt các làn đường
         db_labels, unique_labels = self._dbscan_cluster(embedding_feats)
