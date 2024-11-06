@@ -209,6 +209,11 @@ def train():
                 torch.save(best_model_wts, best_model_save_filename)
                 print(f"Best model saved at epoch {epoch} with validation loss: {best_val_loss:.4f}")
 
+        # Save the last model after each epoch
+        last_model_save_filename = os.path.join(save_path, 'last_model.pth')
+        torch.save(model.state_dict(), last_model_save_filename)
+        print(f"Last model saved at epoch {epoch}")
+
         # Lưu checkpoint sau mỗi epoch
         save_checkpoint(epoch, model, optimizer, best_val_loss, save_path=checkpoint_path)
 
